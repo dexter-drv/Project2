@@ -98,7 +98,7 @@ diff -ruN linux-4.17/include/uapi/asm-generic/unistd.h linux-4.17-modified/inclu
   * 32 bit systems traditionally used different
 diff -ruN linux-4.17/mm/memory.c linux-4.17-modified/mm/memory.c
 --- linux-4.17/mm/memory.c	2018-06-03 17:15:21
-+++ linux-4.17-modified/mm/memory.c	2023-12-31 12:24:32
++++ linux-4.17-modified/mm/memory.c	2023-12-31 12:52:01
 @@ -69,6 +69,8 @@
  #include <linux/userfaultfd_k.h>
  #include <linux/dax.h>
@@ -122,7 +122,7 @@ diff -ruN linux-4.17/mm/memory.c linux-4.17-modified/mm/memory.c
 +};
 +
 +// Red-Black Tree to index extents by starting physical address
-+static struct rb_root extents_root = RB_ROOT;
++struct rb_root extents_root = RB_ROOT;
 +struct Extent *create_extent(phys_addr_t start) {
 +    struct Extent *extent = vmalloc(sizeof(struct Extent));
 +    if (!extent)
