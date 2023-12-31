@@ -1,0 +1,209 @@
+diff -ruN linux-4.17/Makefile linux-4.17-modified/Makefile
+--- linux-4.17/Makefile	2018-06-03 17:15:21
++++ linux-4.17-modified/Makefile	2023-12-31 08:40:41
+@@ -978,7 +978,7 @@
+ 
+ 
+ ifeq ($(KBUILD_EXTMOD),)
+-core-y		+= kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/
++core-y		+= kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/ hello/
+ 
+ vmlinux-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(init-m) \
+ 		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \
+diff -ruN linux-4.17/arch/x86/entry/syscalls/syscall_64.tbl linux-4.17-modified/arch/x86/entry/syscalls/syscall_64.tbl
+--- linux-4.17/arch/x86/entry/syscalls/syscall_64.tbl	2018-06-03 17:15:21
++++ linux-4.17-modified/arch/x86/entry/syscalls/syscall_64.tbl	2023-12-31 08:42:16
+@@ -384,3 +384,5 @@
+ 545	x32	execveat		__x32_compat_sys_execveat/ptregs
+ 546	x32	preadv2			__x32_compat_sys_preadv64v2
+ 547	x32	pwritev2		__x32_compat_sys_pwritev64v2
++548     common  hello                   __x64_sys_hello
++549     common  dloc			__x64_sys_dloc
+diff -ruN linux-4.17/hello/Makefile linux-4.17-modified/hello/Makefile
+--- linux-4.17/hello/Makefile	1969-12-31 19:00:00
++++ linux-4.17-modified/hello/Makefile	2023-12-31 08:43:00
+@@ -0,0 +1 @@
++obj-y := hello.o
+diff -ruN linux-4.17/hello/hello.c linux-4.17-modified/hello/hello.c
+--- linux-4.17/hello/hello.c	1969-12-31 19:00:00
++++ linux-4.17-modified/hello/hello.c	2023-12-31 08:48:13
+@@ -0,0 +1,22 @@
++#include <linux/kernel.h>
++#include <linux/syscalls.h>
++
++extern int our_pid;
++SYSCALL_DEFINE1(hello, int, a)
++{
++        our_pid=a;
++    	return a;
++}
++
++extern int extent_no;
++extern int id;
++extern int pgflts;
++SYSCALL_DEFINE0(dloc)
++{
++        int ret = extent_no;
++        extent_no = 0;
++        id = 0;
++        printk("PGFLTS:%d\n", pgflts);
++    	return ret;
++}
++
+diff -ruN linux-4.17/include/linux/hello.h linux-4.17-modified/include/linux/hello.h
+--- linux-4.17/include/linux/hello.h	1969-12-31 19:00:00
++++ linux-4.17-modified/include/linux/hello.h	2023-12-31 08:47:58
+@@ -0,0 +1,4 @@
++int our_pid=-1;
++int extent_no=0;
++int id=0;
++int pgflts=0;
+diff -ruN linux-4.17/include/linux/syscalls.h linux-4.17-modified/include/linux/syscalls.h
+--- linux-4.17/include/linux/syscalls.h	2018-06-03 17:15:21
++++ linux-4.17-modified/include/linux/syscalls.h	2023-12-31 08:49:23
+@@ -1267,5 +1267,6 @@
+ {
+ 	return do_sys_truncate(pathname, length);
+ }
+-
++asmlinkage long sys_hello(int);
++asmlinkage long sys_dloc(void);
+ #endif
+diff -ruN linux-4.17/include/uapi/asm-generic/unistd.h linux-4.17-modified/include/uapi/asm-generic/unistd.h
+--- linux-4.17/include/uapi/asm-generic/unistd.h	2018-06-03 17:15:21
++++ linux-4.17-modified/include/uapi/asm-generic/unistd.h	2023-12-31 08:51:32
+@@ -732,9 +732,13 @@
+ __SYSCALL(__NR_pkey_free,     sys_pkey_free)
+ #define __NR_statx 291
+ __SYSCALL(__NR_statx,     sys_statx)
+-
++#define __NR_process_hello 292
++__SYSCALL(__NR_process_hello, sys_hello)
++#define __NR_process_dloc 293
++__SYSCALL(__NR_process_dloc, sys_dloc)
+ #undef __NR_syscalls
+-#define __NR_syscalls 292
++#define __NR_syscalls 294
++
+ 
+ /*
+  * 32 bit systems traditionally used different
+diff -ruN linux-4.17/mm/memory.c linux-4.17-modified/mm/memory.c
+--- linux-4.17/mm/memory.c	2018-06-03 17:15:21
++++ linux-4.17-modified/mm/memory.c	2023-12-31 08:54:37
+@@ -69,6 +69,8 @@
+ #include <linux/userfaultfd_k.h>
+ #include <linux/dax.h>
+ #include <linux/oom.h>
++#include<linux/hello.h>
++#include<linux/rbtree.h>
+ 
+ #include <asm/io.h>
+ #include <asm/mmu_context.h>
+@@ -3095,6 +3097,75 @@
+ 	return ret;
+ }
+ 
++// Extent related variable initialization
++int id=0;
++int extent_no=0;
++int pgflts=0;
++int flag=0;
++
++// Defining the extent structure
++struct Extent {
++    struct rb_node rb_node;
++    phys_addr_t start_no;
++    unsigned int page_count;
++    unsigned int prev_page_count;
++    unsigned int extent_id;
++};
++
++// Red-Black Tree to index extents by starting physical address
++static struct rb_root extents_root = RB_ROOT;
++struct Extent *create_extent(phys_addr_t start) {
++    struct Extent *extent = kmalloc(sizeof(struct Extent), GFP_KERNEL);
++    if (!extent)
++        return NULL;
++
++    extent->start_no = start;
++    extent->page_count = 1;
++    extent->prev_page_count=0;
++    extent->extent_id = id++;
++    return extent;
++}
++
++void insert_extent(struct Extent *extent) {
++    struct rb_node **new = &(extents_root.rb_node), *parent = NULL;
++
++    while (*new) {
++        struct Extent *this = container_of(*new, struct Extent, rb_node);
++
++        parent = *new;
++        if (extent->start_no < this->start_no)
++            new = &((*new)->rb_left);
++        else if (extent->start_no > this->start_no)
++            new = &((*new)->rb_right);
++    }
++
++    rb_link_node(&extent->rb_node, parent, new);
++    rb_insert_color(&extent->rb_node, &extents_root);
++}
++
++struct Extent *find_extent(phys_addr_t address) {
++    struct rb_node *node = extents_root.rb_node;
++
++    while (node) {
++        struct Extent *extent = container_of(node, struct Extent, rb_node);
++
++        if(address+1==extent->start_no-extent->prev_page_count)
++        {
++                flag=1;
++                return extent;
++        }
++        else if (address < extent->start_no+extent->page_count)
++            node = node->rb_left;
++        else if (address > extent->start_no+extent->page_count)
++            node = node->rb_right;
++        else
++            return extent;  // Found the extent
++
++    }
++    return NULL;  // Extent not found
++}
++
++
+ /*
+  * We enter with non-exclusive mmap_sem (to exclude vma changes,
+  * but allow concurrent faults), and pte mapped but not yet locked.
+@@ -3196,6 +3267,30 @@
+ 
+ 	/* No need to invalidate - it was non-present before */
+ 	update_mmu_cache(vma, vmf->address, vmf->pte);
++
++	// Handling extent related changes while setting the page table entry
++	if(our_pid==current->tgid)
++        {
++                pgflts++;
++                struct Extent *extent = find_extent(pte_val(*vmf->pte)>>12);
++		if (!extent) 
++                 {
++                        extent = create_extent(pte_val(*vmf->pte)>>12);
++                        if (!extent)
++                                printk("Allocation Error");
++                        insert_extent(extent);
++                        extent_no++;
++                }
++                if(!flag)
++		{
++                        extent->page_count++;
++		}
++                else
++                {       
++                        extent->prev_page_count++;
++                        flag=0;
++                }
++        }
+ unlock:
+ 	pte_unmap_unlock(vmf->pte, vmf->ptl);
+ 	return ret;
