@@ -1,170 +1,149 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <string.h>
 #include <pthread.h>
 
-/* Macro that controls the matrix dimensions */
-#define MATRIX_SIZE 500
- /* Macro for addressing a normal array as if it were two dimensional */
-#define array(arr, i, j) arr[(int) MATRIX_SIZE * (int) i + (int) j]
+#define MAX_SIZE 100
+#define NUM_THREADS 10
 
-void fill_matrix(int *matrix);
-void print_matrix(int *matrix, int print_width);
-int *matrix_page(int *matrix, unsigned long m_size);
-void matrix_unmap(int *matrix, unsigned long m_size);
-__attribute__ ((noreturn)) void row_multiply(void *row_args);
-
-/* Integer pointers for each matrix */
-static int *matrix_a, *matrix_b, *matrix_c;
-
-/* Argument struct for each thread */
-typedef struct arg_struct
+// Structure to pass data to threads
+struct thread_data
 {
-  int *a;
-  int *b;
-  int *c;
-  int row;
-} thr_args;
+    int thread_id;
+    int num_threads;
+    int **matrix1;
+    int **matrix2;
+    int **result_matrix;
+    int rows;
+    int cols;
+};
 
-/* Fill the given matrix with an integer from 1 to 10 */
-void fill_matrix(int *matrix)
+// Function to generate random values for a matrix
+void initializeMatrix(int **matrix, int rows, int cols)
 {
-  for (int i = 0; i < MATRIX_SIZE; i++)
-  {
-    for (int j = 0; j < MATRIX_SIZE; j++)
+    for (int i = 0; i < rows; ++i)
     {
-      array(matrix, i, j) = rand() % 10 + 1;
+        for (int j = 0; j < cols; ++j)
+        {
+            matrix[i][j] = rand() % 10; // Adjust the range as needed
+        }
     }
-  }
-  return;
 }
 
-/* Print the given matrix */
-void print_matrix(int *matrix, int print_width)
+// Function to perform matrix multiplication for a specific range of rows
+void *multiplyMatrix(void *arg)
 {
-  for (int i = 0; i < MATRIX_SIZE; i++)
-  {
-    for (int j = 0; j <  MATRIX_SIZE; j++)
+    struct thread_data *data = (struct thread_data *)arg;
+    int start_row = data->thread_id * (data->rows / data->num_threads);
+    int end_row = (data->thread_id + 1) * (data->rows / data->num_threads);
+
+    for (int i = start_row; i < end_row; ++i)
     {
-      printf("[%*d]", print_width, array(matrix, i, j));
+        for (int j = 0; j < data->cols; ++j)
+        {
+            data->result_matrix[i][j] = 0;
+            for (int k = 0; k < data->cols; ++k)
+            {
+                data->result_matrix[i][j] += data->matrix1[i][k] * data->matrix2[k][j];
+            }
+        }
     }
-    printf("\n");
-  }
-  printf("\n");
-  return;
+
+    pthread_exit(NULL);
 }
 
-/* Maps the given matrix into a memory page using mmap() */
-int *matrix_page(int *matrix, unsigned long m_size)
+int main()
 {
-  matrix = mmap(0, m_size, PROT_READ | PROT_WRITE,
-    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  /* If mmap() failed, exit! */
-  if (matrix == (void *) -1)
-  {
-    exit(EXIT_FAILURE);
-  }
-  memset((void *) matrix, 0, m_size);
-  return matrix;
-}
+    pid_t p = getpid();
+    syscall(548, p);
+    int rows = MAX_SIZE;
+    int cols = MAX_SIZE;
 
-/* Unmaps the given matrix from its memory page */
-void matrix_unmap(int *matrix, unsigned long m_size)
-{
-  /* If munmap() failed, exit! */
-  if (munmap(matrix, m_size) == -1)
-  {
-    exit(EXIT_FAILURE);
-  }
-}
+    // Get matrix size from user
+    // printf("Enter the number of rows: ");
+    // scanf("%d", &rows);
+    // printf("Enter the number of columns: ");
+    // scanf("%d", &cols);
 
-/* Calculate all indices for the given row */
-__attribute__ ((noreturn)) void row_multiply(void *row_args)
-{
-  thr_args *args = (thr_args *) row_args;
-  for(int i = 0; i < MATRIX_SIZE; i++)
-  {
-    for (int j = 0; j < MATRIX_SIZE; j++)
+    // if (rows <= 0 || cols <= 0 || rows > MAX_SIZE || cols > MAX_SIZE)
+    // {
+    //     printf("Invalid matrix size. Please enter valid dimensions.\n");
+    //     return 1;
+    // }
+
+    // Dynamically allocate memory for matrices
+    int **matrix1 = (int **)malloc(rows * sizeof(int *));
+    int **matrix2 = (int **)malloc(rows * sizeof(int *));
+    int **result_matrix = (int **)malloc(rows * sizeof(int *));
+
+    for (int i = 0; i < rows; ++i)
     {
-      int add = array(args->a, args->row, j) * array(args->b, j, i);
-      array(args->c, args->row, i) += add;
+        matrix1[i] = (int *)malloc(cols * sizeof(int));
+        matrix2[i] = (int *)malloc(cols * sizeof(int));
+        result_matrix[i] = (int *)malloc(cols * sizeof(int));
     }
-  }
-  pthread_exit(0);
-}
 
-int main(void)
-{
-  pid_t p = getpid();
-  syscall(548,p);
-  clock_t start = clock();
-  /* Calculate the memory size of the matrices */
-  unsigned long m_size = sizeof(int) * (unsigned long) (MATRIX_SIZE * MATRIX_SIZE);
+    // Initialize matrices with random values
+    initializeMatrix(matrix1, rows, cols);
+    initializeMatrix(matrix2, rows, cols);
 
-  /* Map matrix_a, matrix_b, and matrix_c into a memory page */
-  matrix_a = matrix_page(matrix_a, m_size);
-  matrix_b = matrix_page(matrix_b, m_size);
-  matrix_c = matrix_page(matrix_c, m_size);
+    // Number of threads to use
+    int num_threads = NUM_THREADS;
+    // printf("Enter the number of threads: ");
+    // scanf("%d", &num_threads);
 
-  /* Fill both matrices with random integers 1-10 */
-  fill_matrix(matrix_a);
-  fill_matrix(matrix_b);
+    // if (num_threads <= 0)
+    // {
+    //     printf("Invalid number of threads. Please enter a positive value.\n");
+    //     return 1;
+    // }
 
-  /* Print both matrices before printing them */
-//   printf("Matrix A:\n---------\n");
-//   print_matrix(matrix_a, 2);
-//   printf("Matrix B:\n---------\n");
-//   print_matrix(matrix_b, 2);
+    // Create thread data and array of thread IDs
+    pthread_t threads[num_threads];
+    struct thread_data thread_data_array[num_threads];
 
-  /* Allocate arrays for thread data */
-  pthread_t *thrs;
-  thr_args *args;
-  if ((thrs = malloc(sizeof(pthread_t) * (unsigned long) MATRIX_SIZE)) == NULL ||
-    (args = malloc(sizeof(thr_args) * (unsigned long) MATRIX_SIZE)) == NULL)
-  {
-    exit(EXIT_FAILURE);
-  }
+    // Create threads
+    for (int i = 0; i < num_threads; ++i)
+    {
+        thread_data_array[i].thread_id = i;
+        thread_data_array[i].num_threads = num_threads;
+        thread_data_array[i].matrix1 = matrix1;
+        thread_data_array[i].matrix2 = matrix2;
+        thread_data_array[i].result_matrix = result_matrix;
+        thread_data_array[i].rows = rows;
+        thread_data_array[i].cols = cols;
 
-  /* Create threads 0, 1, ..., N-1, and give them a struct with their data */
-  for (int i = 0; i < MATRIX_SIZE; i++)
-  {
-    args[i] = (thr_args) {
-      .a = matrix_a,
-      .b = matrix_b,
-      .c = matrix_c,
-      .row = i
-    };
-    pthread_create(&thrs[i], NULL, (void *) &row_multiply, (void *) &args[i]);
-  }
+        pthread_create(&threads[i], NULL, multiplyMatrix, (void *)&thread_data_array[i]);
+    }
 
-  /* Collect each thread */
-  for (int j = 0; j < MATRIX_SIZE; j++)
-    pthread_join(thrs[j], NULL);
+    // Join threads
+    for (int i = 0; i < num_threads; ++i)
+    {
+        pthread_join(threads[i], NULL);
+    }
 
-  /* Free resources allocated for each thread */
-  if (thrs != NULL)
-  {
-    free(thrs);
-    thrs = NULL;
-  }
-  if (args != NULL)
-  {
-    free(args);
-    args = NULL;
-  }
+    // Print result matrix
+    // printf("Result Matrix:\n");
+    // for (int i = 0; i < rows; ++i)
+    // {
+    //     for (int j = 0; j < cols; ++j)
+    //     {
+    //         printf("%d\t", result_matrix[i][j]);
+    //     }
+    //     printf("\n");
+    // }
 
-  /* Print the result of the multiplication */
-//   printf("Result matrix:\n--------------\n");
-//   print_matrix(matrix_c, 4);
+    printf("No of extents created:%ld\n", syscall(549));
 
-  /* Give back the allocated memory pages */
-  matrix_unmap(matrix_a, m_size);
-  matrix_unmap(matrix_b, m_size);
-  matrix_unmap(matrix_c, m_size);
-  printf("Time: %f seconds \n", (double)(clock() - start) / CLOCKS_PER_SEC);
-  printf("No of extents created:%ld\n",syscall(549));
+    // Free dynamically allocated memory
+    for (int i = 0; i < rows; ++i)
+    {
+        free(matrix1[i]);
+        free(matrix2[i]);
+        free(result_matrix[i]);
+    }
+    free(matrix1);
+    free(matrix2);
+    free(result_matrix);
+
+    return 0;
 }
