@@ -132,7 +132,7 @@ int main()
     //     printf("\n");
     // }
 
-    printf("No of extents created:%ld\n", syscall(549));
+    printf("No of extents created:%d\n", syscall(549));
 
     // Free dynamically allocated memory
     for (int i = 0; i < rows; ++i)
