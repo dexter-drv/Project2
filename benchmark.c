@@ -20,9 +20,10 @@ struct thread_data
 // Function to generate random values for a matrix
 void initializeMatrix(int **matrix, int rows, int cols)
 {
-    for (int i = 0; i < rows; ++i)
+    int i, j;
+    for (i = 0; i < rows; ++i)
     {
-        for (int j = 0; j < cols; ++j)
+        for (j = 0; j < cols; ++j)
         {
             matrix[i][j] = rand() % 10; // Adjust the range as needed
         }
@@ -35,13 +36,13 @@ void *multiplyMatrix(void *arg)
     struct thread_data *data = (struct thread_data *)arg;
     int start_row = data->thread_id * (data->rows / data->num_threads);
     int end_row = (data->thread_id + 1) * (data->rows / data->num_threads);
-
-    for (int i = start_row; i < end_row; ++i)
+    int i, j, k;
+    for (i = start_row; i < end_row; ++i)
     {
-        for (int j = 0; j < data->cols; ++j)
+        for (j = 0; j < data->cols; ++j)
         {
             data->result_matrix[i][j] = 0;
-            for (int k = 0; k < data->cols; ++k)
+            for (k = 0; k < data->cols; ++k)
             {
                 data->result_matrix[i][j] += data->matrix1[i][k] * data->matrix2[k][j];
             }
@@ -57,6 +58,8 @@ int main()
     syscall(548, p);
     int rows = MAX_SIZE;
     int cols = MAX_SIZE;
+
+    int i;
 
     // Get matrix size from user
     // printf("Enter the number of rows: ");
@@ -75,7 +78,7 @@ int main()
     int **matrix2 = (int **)malloc(rows * sizeof(int *));
     int **result_matrix = (int **)malloc(rows * sizeof(int *));
 
-    for (int i = 0; i < rows; ++i)
+    for (i = 0; i < rows; ++i)
     {
         matrix1[i] = (int *)malloc(cols * sizeof(int));
         matrix2[i] = (int *)malloc(cols * sizeof(int));
@@ -102,7 +105,7 @@ int main()
     struct thread_data thread_data_array[num_threads];
 
     // Create threads
-    for (int i = 0; i < num_threads; ++i)
+    for (i = 0; i < num_threads; ++i)
     {
         thread_data_array[i].thread_id = i;
         thread_data_array[i].num_threads = num_threads;
@@ -116,7 +119,7 @@ int main()
     }
 
     // Join threads
-    for (int i = 0; i < num_threads; ++i)
+    for (i = 0; i < num_threads; ++i)
     {
         pthread_join(threads[i], NULL);
     }
@@ -135,7 +138,7 @@ int main()
     printf("No of extents created:%ld\n", syscall(549));
 
     // Free dynamically allocated memory
-    for (int i = 0; i < rows; ++i)
+    for (i = 0; i < rows; ++i)
     {
         free(matrix1[i]);
         free(matrix2[i]);
