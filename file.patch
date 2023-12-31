@@ -90,7 +90,7 @@ diff -ruN linux-4.17/include/uapi/asm-generic/unistd.h linux-4.17-modified/inclu
   * 32 bit systems traditionally used different
 diff -ruN linux-4.17/mm/memory.c linux-4.17-modified/mm/memory.c
 --- linux-4.17/mm/memory.c	2018-06-03 17:15:21
-+++ linux-4.17-modified/mm/memory.c	2023-12-31 08:54:37
++++ linux-4.17-modified/mm/memory.c	2023-12-31 09:44:30
 @@ -69,6 +69,8 @@
  #include <linux/userfaultfd_k.h>
  #include <linux/dax.h>
@@ -100,14 +100,11 @@ diff -ruN linux-4.17/mm/memory.c linux-4.17-modified/mm/memory.c
  
  #include <asm/io.h>
  #include <asm/mmu_context.h>
-@@ -3095,6 +3097,75 @@
+@@ -3095,6 +3097,72 @@
  	return ret;
  }
  
 +// Extent related variable initialization
-+int id=0;
-+int extent_no=0;
-+int pgflts=0;
 +int flag=0;
 +
 +// Defining the extent structure
@@ -176,7 +173,7 @@ diff -ruN linux-4.17/mm/memory.c linux-4.17-modified/mm/memory.c
  /*
   * We enter with non-exclusive mmap_sem (to exclude vma changes,
   * but allow concurrent faults), and pte mapped but not yet locked.
-@@ -3196,6 +3267,30 @@
+@@ -3196,6 +3264,30 @@
  
  	/* No need to invalidate - it was non-present before */
  	update_mmu_cache(vma, vmf->address, vmf->pte);
