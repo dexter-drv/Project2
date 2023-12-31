@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
-#define MAX_SIZE 100
+#define MAX_SIZE 1000
 #define NUM_THREADS 10
 
 // Structure to pass data to threads
@@ -132,7 +133,7 @@ int main()
     //     printf("\n");
     // }
 
-    printf("No of extents created:%ld\n", syscall(549));
+    printf("No of extents created:%d\n", syscall(549));
 
     // Free dynamically allocated memory
     for (int i = 0; i < rows; ++i)
