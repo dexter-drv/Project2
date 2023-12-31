@@ -2,7 +2,7 @@ Setup
 
 # Set environment variables
 
-source scripts/setvars.sh "bionic" ( Not "trusty" as this leads to a different gcc version inside QEMU)
+source scripts/setvars.sh "bionic" (Not "trusty" as this leads to a different gcc version inside QEMU)
 
 # Download and unzip linux-4.17
 
